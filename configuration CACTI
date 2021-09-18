@@ -1,0 +1,146 @@
+yum install https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm -y
+yum install php-intl php-ldap php-fpm php php-pecl-json php-xml php-mysql* php-mbstring -y  
+yum install -y mailx postfix procmail -y
+yum install -y mariadb mariadb-server dovecot dhcp-server httpd mod_ssl
+yum install httpd httpd-tools mariadb-server mariadb php php-fpm php-gd php-xml php-mbstring php-json php-ldap
+
+yum install bind bind-utils -y
+
+
+
+yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm
+
+Install Cacti and SNMP.
+
+dnf --enablerepo=epel -y install cacti net-snmp net-snmp-utils php-mysqlnd php-snmp php-bcmath rrdtool
+
+Install SNMP and RRDTool.
+yum install -y net-snmp net-snmp-utils net-snmp-libs rrdtool
+
+yum install -y mariadb-server mariadb
+
+
+Install the required PHP extensions.
+yum install -y php php-xml php-session php-sockets php-ldap php-gd php-json php-mysqlnd php-gmp php-mbstring php-posix php-snmp php-intl
+
+Start the following services.
+systemctl start httpd
+
+systemctl start snmpd
+
+systemctl start mariadb
+
+Enable services to start at system start-up.
+systemctl enable httpd
+
+systemctl enable snmpd
+
+systemctl enable mariadb
+
+Database Tuning
+vim /etc/my.cnf.d/mariadb-server.cnf
+
+Add variables in the [mysqld] section.
+collation-server=utf8mb4_unicode_ci
+character-set-server=utf8mb4
+max_heap_table_size=32M
+tmp_table_size=32M
+join_buffer_size=64M
+# 25% Of Total System Memory
+innodb_buffer_pool_size=1GB
+# pool_size/128 for less than 1GB of memory
+innodb_buffer_pool_instances=10
+innodb_flush_log_at_timeout=3
+innodb_read_io_threads=32
+innodb_write_io_threads=16
+innodb_io_capacity=5000
+innodb_io_capacity_max=10000
+
+Restart the service.
+systemctl restart mariadb
+
+Create Cacti Database
+mysql -u root -p
+
+create database cacti;
+
+GRANT ALL ON cacti.* TO cactiuser@localhost IDENTIFIED BY 'cactipassword';
+
+flush privileges;
+
+exit
+
+
+mysql -u root -p mysql < /usr/share/mariadb/mysql_test_data_timezone.sql
+
+Then, log in to MySQL.
+mysql -u root -p
+
+GRANT SELECT ON mysql.time_zone_name TO cactiuser@localhost;
+
+flush privileges;
+
+exit
+
+Install & Configure Cacti
+
+yum install -y cacti
+
+mysql cacti < /usr/share/doc/cacti/cacti.sql -u cactiuser -p
+
+vim /usr/share/cacti/include/config.php
+
+/*
+* Make sure these values reflect your actual database/host/user/password
+*/
+
+$database_type = 'mysql';
+$database_default = 'cacti';
+$database_hostname = 'localhost';
+$database_username = 'cactiuser';
+$database_password = 'cactipassword';
+$database_port = '3306';
+
+Edit the Cacti’s cron entry in the crontab file to poll every five minutes.
+vim /etc/cron.d/cacti
+
+Uncomment the below line.
+*/5 * * * *     apache  /usr/bin/php /usr/share/cacti/poller.php > /dev/null 2>&1
+
+Edit the Apache configuration file to perform the remote installation.
+vim /etc/httpd/conf.d/cacti.conf
+
+
+
+Alias /cacti    /usr/share/cacti
+
+
+<Directory /usr/share/cacti/>
+        <IfModule mod_authz_core.c>
+                # httpd 2.4
+                Require all granted
+        </IfModule>
+        <IfModule !mod_authz_core.c>
+                # httpd 2.2
+                Order deny,allow
+                Deny from all
+                Allow from localhost
+        </IfModule>
+</Directory>
+
+vim /etc/php.ini
+
+date.timezone = Dakar/Senegal
+
+memory_limit = 512M 
+
+max_execution_time = 60
+
+Restart the services.
+Firewall
+firewall-cmd --permanent --add-service=http
+
+firewall-cmd --reload
+
+SELinux
+setenforce 0
